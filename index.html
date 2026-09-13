@@ -1,1 +1,569 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no"/>
+<title>ZX AI Prediction Tool - Standalone</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;800;900&family=Share+Tech+Mono&family=Rajdhani:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>
+    :root {
+        --neon-green: #00ff66;
+        --neon-dark: #008833;
+        --bg-deep: #011206;
+        --pink: #ff5ec4;
+        --cyan: #00e5ff;
+        --yellow: #ffd23a;
+        --red: #ff2a4a;
+        --ink: #ffffff;
+    }
 
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    
+    body {
+        height: 100vh;
+        width: 100vw;
+        background: #000;
+        font-family: 'Rajdhani', system-ui, sans-serif;
+        color: var(--ink);
+        user-select: none;
+        -webkit-user-select: none;
+        overflow: hidden;
+    }
+
+    /* =========================================
+       LOGIN SCREEN OVERLAY
+       ========================================= */
+    #login-overlay {
+        position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+        background: radial-gradient(circle at center, #011206 0%, #000000 100%);
+        z-index: 9999999; display: flex; align-items: center; justify-content: center;
+        flex-direction: column;
+    }
+    .login-box {
+        background: linear-gradient(180deg, rgba(0,255,102,.08), transparent 30%), #031a0c;
+        border: 2px solid rgba(0,255,102,.5); box-shadow: 0 0 20px rgba(0,255,102,0.2);
+        border-radius: 16px; padding: 30px 25px; width: 85%; max-width: 320px;
+        text-align: center;
+    }
+    .login-title {
+        font-family: 'Orbitron', sans-serif; font-size: 20px; font-weight: 900;
+        color: var(--neon-green); margin-bottom: 20px; letter-spacing: 2px;
+    }
+    .login-input {
+        width: 100%; padding: 12px; background: rgba(0,0,0,0.5); border: 1px solid var(--neon-dark);
+        border-radius: 8px; color: #fff; font-family: 'Share Tech Mono', monospace; font-size: 16px;
+        text-align: center; margin-bottom: 15px; outline: none; transition: border 0.3s;
+    }
+    .login-input:focus { border-color: var(--neon-green); box-shadow: 0 0 10px rgba(0,255,102,0.3); }
+    .login-btn {
+        width: 100%; padding: 12px; background: linear-gradient(90deg, var(--neon-dark), var(--neon-green));
+        color: #000; font-family: 'Orbitron', sans-serif; font-weight: 900; font-size: 16px;
+        border: none; border-radius: 8px; cursor: pointer; letter-spacing: 1.5px;
+    }
+    .login-btn:active { transform: scale(0.96); }
+    #login-error {
+        color: var(--red); font-family: 'Rajdhani', sans-serif; font-size: 14px;
+        font-weight: 700; margin-top: 10px; min-height: 20px;
+    }
+
+    /* =========================================
+       BACKGROUND WEBVIEW (IFRAME)
+       ========================================= */
+    #bg-iframe {
+        position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+        border: none; z-index: 1; display: none;
+    }
+
+    /* =========================================
+       LIVE WINNING NOTIFICATION
+       ========================================= */
+    .notif-wrapper {
+        position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+        z-index: 100000; pointer-events: none; display: none;
+    }
+    .notif-box {
+        display: flex; align-items: center; background: linear-gradient(135deg, rgba(5,30,15,0.85), rgba(5,20,10,0.95));
+        border: 1.5px solid rgba(0,255,102,0.5); box-shadow: 0 5px 15px rgba(0,255,102,0.3), inset 0 0 10px rgba(0,255,102,0.1);
+        border-radius: 40px; padding: 4px 24px 4px 4px; gap: 12px; transform: translateY(-150%);
+        transition: transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.5s ease;
+        opacity: 0; width: max-content; max-width: 95vw; backdrop-filter: blur(8px);
+    }
+    .notif-box.show { transform: translateY(0); opacity: 1; }
+    .user-img {
+        width: 34px; height: 34px; border-radius: 50%; border: 1.5px solid #00ff66;
+        background: #000; object-fit: cover;
+    }
+    .text-col { display: flex; flex-direction: column; justify-content: center; }
+    .live-title {
+        font-family: 'Orbitron', sans-serif; font-size: 8.5px; font-weight: 800;
+        color: #00ff66; letter-spacing: 1px; display: flex; align-items: center; gap: 4px; margin-bottom: 2px;
+    }
+    .live-dot { width: 4px; height: 4px; border-radius: 50%; background: #00ff66; animation: blink 1s infinite; }
+    @keyframes blink { 50% { opacity: 0.3; } }
+    .win-text { font-size: 13.5px; font-weight: 700; color: #fff; line-height: 1; white-space: nowrap; }
+
+    /* =========================================
+       MINI LAUNCHER (FLOATING LOGO)
+       ========================================= */
+    #tool-container {
+        position: fixed; bottom: 50px; right: 20px; z-index: 99999; display: none;
+        touch-action: none; /* PREVENTS BACKGROUND SCROLLING WHILE DRAGGING */
+    }
+    .launcher {
+        position: relative; width: 60px; height: 60px; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center; cursor: pointer;
+    }
+    .launcher::before {
+        content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+        border-radius: 50%; border: 2.5px dashed var(--neon-green); animation: spinRing 4s linear infinite;
+    }
+    .logo-img {
+        width: 50px; height: 50px; border-radius: 50%; background: #000; border: 2px solid var(--neon-green);
+        z-index: 2; object-fit: cover;
+    }
+    @keyframes spinRing { 100% { transform: rotate(360deg); } }
+
+    /* =========================================
+       MAIN PANEL TOOL
+       ========================================= */
+    .stage { width: 100%; width: 235px; position: relative; display: none; padding-bottom: 12px; }
+    .panel {
+        position: relative; border-radius: 16px; padding: 8px;
+        background: linear-gradient(180deg, rgba(0,255,102,.08), transparent 30%), radial-gradient(120% 80% at 50% 0%, #032411 0%, #011206 55%, #000000 100%);
+        border: 3px solid rgba(0,255,102,.8); margin-bottom: 4px; box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+    }
+
+    .shine-box { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border-radius: 13px; overflow: hidden; pointer-events: none; z-index: 999; }
+    .shine-box::after { content: ''; position: absolute; top: -50%; left: -60%; width: 25%; height: 200%; background: linear-gradient(to right, transparent, rgba(255,255,255,0.3), transparent); transform: rotate(30deg); animation: lightSweep 1.5s linear infinite; }
+    @keyframes lightSweep { 0% { left: -60%; } 100% { left: 150%; } }
+
+    .head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; padding: 2px 2px 6px; border-bottom: 1px solid rgba(0,255,102,.35); margin-bottom: 6px; position: relative; }
+    .head::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 1px; background: linear-gradient(90deg,transparent,var(--neon-dark),var(--cyan),var(--neon-dark),transparent); }
+    .head-left { display: flex; flex-direction: column; gap: 4px; }
+    .title { font-family: 'Orbitron', sans-serif; font-weight: 900; font-size: 12.5px; letter-spacing: 1px; color: #fff; line-height: 1; white-space: nowrap; }
+    .title b { background: linear-gradient(180deg,#fff,var(--neon-green)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .status-row { display: flex; align-items: center; gap: 6px; font-family: 'Share Tech Mono', monospace; font-size: 9px; letter-spacing: 1px; color: #bff5cb; }
+    .status-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--neon-green); box-shadow: 0 0 6px var(--neon-green),0 0 10px rgba(40,224,122,.7); animation: greenBlink 1.4s ease-in-out infinite; }
+    @keyframes greenBlink { 50% { opacity: .45; transform: scale(.85); } }
+    .head-right { text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+    .wingo { font-family: 'Orbitron', sans-serif; font-weight: 800; font-size: 9px; letter-spacing: 1px; color: var(--pink); }
+    .kolkata-time { font-family: 'Share Tech Mono', monospace; font-size: 8px; letter-spacing: 1px; color: #b3ffcc; }
+
+    .info-box { flex: 1; border-radius: 10px; padding: 10px 8px; display: flex; flex-direction: column; justify-content: center; margin-bottom: 6px; position: relative; z-index: 2; }
+    .box-green { background: radial-gradient(120% 100% at 50% 0%, rgba(0,255,102,.15) 0%, rgba(1,18,6,.8) 100%); border: 1px solid rgba(0,255,102,.4); border-left: 4px solid var(--neon-green); }
+    .box-title { font-family: 'Orbitron', sans-serif; font-size: 12px; font-weight: 800; margin-bottom: 6px; letter-spacing: 1px; }
+    .text-cyan { color: var(--neon-green); }
+    .text-green { color: var(--neon-green); }
+    .box-list { font-family: 'Rajdhani', sans-serif; font-size: 11px; font-weight: 600; color: #ccffdd; line-height: 1.4; margin-bottom: 10px; }
+    .box-footer { font-family: 'Rajdhani', sans-serif; font-size: 10px; font-weight: 700; color: var(--cyan); margin-top: auto; }
+
+    .buttons-area { display: flex; gap: 8px; width: 100%; position: relative; z-index: 2; margin-top: 4px; margin-bottom: 4px; }
+    .btn { flex: 1; padding: 8px 0; border-radius: 6px; font-family: 'Orbitron', sans-serif; font-size: 10.5px; font-weight: 900; cursor: pointer; text-align: center; transition: transform 0.1s; letter-spacing: 1px; }
+    .btn:active { transform: scale(0.95); }
+    .btn-action { background: linear-gradient(90deg, var(--neon-dark), var(--neon-green)); color: #000; border: none; }
+    .btn-hide { background: rgba(255,255,255,.05); color: #fff; border: 1px solid rgba(0,255,102,.4); }
+
+    @keyframes spinLoader { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    .circle-loader { width: 40px; height: 40px; border: 3px solid rgba(0,255,102,.1); border-top: 3px solid var(--neon-green); border-bottom: 3px solid #00994d; border-radius: 50%; animation: spinLoader 1s linear infinite; margin: 0 auto; }
+
+    .countdown-wrap { background: radial-gradient(120% 90% at 50% 50%, #032411 0%, #011206 60%, #000000 100%); border: 1px solid rgba(0,255,102,.4); border-radius: 10px; padding: 4px; margin-bottom: 4px; position: relative; overflow: hidden; z-index: 2; }
+    .countdown-label { text-align: center; font-family: 'Share Tech Mono', monospace; font-size: 8px; letter-spacing: 2px; color: #b3ffcc; margin-bottom: 2px; position: relative; z-index: 2; }
+    .countdown { text-align: center; font-family: 'Orbitron', sans-serif; font-weight: 900; font-size: 24px; letter-spacing: 2px; line-height: 1; color: var(--neon-green); transition: color .3s ease; position: relative; z-index: 2; }
+    .countdown.warn { color: var(--yellow) }
+    .countdown.crit { color: var(--red); animation: critPulse .6s ease-in-out infinite }
+    @keyframes critPulse { 50% { transform: scale(1.05); filter: brightness(1.3); } }
+    .cd-bar { margin-top: 4px; height: 4px; border-radius: 4px; overflow: hidden; background: rgba(255,255,255,.08); border: 1px solid rgba(0,255,102,.4); position: relative; z-index: 2; }
+    .cd-bar > i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg,var(--neon-green),var(--cyan)); transition: width 1s linear, background .3s ease; }
+    .cd-bar.warn > i { background: linear-gradient(90deg,var(--yellow),#ffb83a) }
+    .cd-bar.crit > i { background: linear-gradient(90deg,var(--red),#ff7a1f) }
+
+    .ball-box { position: relative; border-radius: 10px; padding: 8px 4px 6px; background: radial-gradient(120% 100% at 50% 50%, #032411 0%, #011206 70%); border: 1px solid rgba(0,255,102,.4); margin-bottom: 4px; display: flex; align-items: center; justify-content: center; min-height: 50px; overflow: hidden; z-index: 2; flex-direction: column; }
+    .ball-box::before { content: ''; position: absolute; inset: 0; background: radial-gradient(80% 60% at 50% 50%, rgba(0,255,102,.18), transparent 70%), radial-gradient(60% 40% at 50% 50%, rgba(0,229,255,.15), transparent 70%); pointer-events: none; }
+    
+    .ball-row { display: flex; align-items: center; justify-content: center; gap: 12px; position: relative; z-index: 2; }
+    .ball { position: relative; width: 38px; height: 38px; border-radius: 50%; padding: 1.5px; display: flex; align-items: center; justify-content: center; overflow: hidden; animation: ballFloat 2.4s ease-in-out infinite; box-shadow: 0 0 12px rgba(255,42,74,0.4); }
+    .ball:nth-child(1) { animation-delay: 0s; }
+    .ball:nth-child(2) { width: 46px; height: 46px; animation-delay: .2s; }
+    .ball:nth-child(3) { animation-delay: .4s; }
+    .ball::before { content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; background: conic-gradient(from 180deg at 50% 50%, transparent 60%, #ff2a4a 100%); animation: rotateSnake 2s linear infinite; }
+    .ball-in { position: relative; width: 100%; height: 100%; border-radius: 50%; background: linear-gradient(135deg, #1f0408 0%, #0a0102 100%); display: flex; align-items: center; justify-content: center; z-index: 2; box-shadow: inset 0 0 8px rgba(0,0,0,0.8); border: 1px solid rgba(255,42,74,0.2); }
+    .ball-in img { width: 88%; height: 88%; object-fit: contain; } /* Ensures number png fits perfectly */
+    .ball-in svg { width: 52%; height: 52%; stroke: #ffffff; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 0 5px rgba(255,255,255,0.9)); }
+    
+    @keyframes ballFloat { 0%,100% { transform: translateY(0) rotate(0) } 50% { transform: translateY(-6px) rotate(8deg) } }
+    @keyframes rotateSnake { 100% { transform: rotate(360deg); } }
+    .ball-spin { animation: ballSpin .35s linear infinite !important }
+    @keyframes ballSpin { to { transform: rotate(360deg) } }
+    
+    .lock-text { font-family: 'Rajdhani', sans-serif; font-size: 8.5px; font-weight: 800; color: #ffffff; letter-spacing: 0.5px; margin-top: 8px; text-shadow: 0 0 5px rgba(255,255,255,0.5); text-align: center; white-space: nowrap; }
+
+    .results { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 4px; position: relative; z-index: 2; }
+    .res-pill { font-family: 'Orbitron', sans-serif; font-weight: 900; font-size: 11px; letter-spacing: 1px; color: #fff; padding: 4px 15px; border-radius: 999px; position: relative; transition: transform .3s ease; text-transform: uppercase; }
+
+    .res-size-big { background: linear-gradient(180deg,#ffc04a 0%, #ff8a1f 55%, #c95e00 100%); border: 1.5px solid rgba(255,210,120,.9); }
+    .res-size-small { background: linear-gradient(180deg,#4ea5ff 0%, #0b60ff 55%, #002ba8 100%); border: 1.5px solid rgba(140,200,255,.9); }
+    .res-color { background: linear-gradient(180deg,#ff5a6e 0%, #ff2a4a 55%, #a40020 100%); border: 1.5px solid rgba(255,140,150,.9); }
+    
+    .res-pop { animation: resPop .55s cubic-bezier(.2,1.6,.4,1) }
+    @keyframes resPop { 0% { transform: scale(.6); opacity: 0 } 60% { transform: scale(1.1); opacity: 1 } 100% { transform: scale(1); opacity: 1 } }
+    
+    .conf { margin-bottom: 2px; position: relative; z-index: 2; }
+    .conf-head { display: flex; justify-content: space-between; align-items: center; font-family: 'Share Tech Mono', monospace; font-size: 10px; letter-spacing: 1px; color: #b3ffcc; margin-bottom: 4px; }
+    .conf-head b { color: var(--cyan); font-weight: 800; font-family: 'Orbitron', sans-serif; font-size: 11px; }
+    .conf-bar { height: 6px; border-radius: 6px; overflow: hidden; background: rgba(255,255,255,.08); border: 1px solid rgba(0,255,102,.4); position: relative; }
+    .conf-bar > i { display: block; height: 100%; width: 0%; background: linear-gradient(90deg,var(--neon-dark),var(--cyan),var(--neon-green)); transition: width 1s cubic-bezier(.3,.7,.3,1); border-radius: 6px; }
+</style>
+</head>
+<body>
+
+<!-- LOGIN OVERLAY -->
+<div id="login-overlay">
+    <div class="login-box">
+        <div class="login-title">SYSTEM LOGIN</div>
+        <input type="password" id="passInput" class="login-input" placeholder="Enter Access Key" />
+        <button class="login-btn" onclick="checkLogin()">UNLOCK</button>
+        <div id="login-error"></div>
+    </div>
+</div>
+
+<!-- BACKGROUND WEBSITE IFRAME -->
+<iframe id="bg-iframe" src="https://veergame.tezwin.us.cc/#/login"></iframe>
+
+<!-- NOTIFICATION POPUP -->
+<div class="notif-wrapper" id="notif-container">
+    <div class="notif-box" id="nBox">
+        <img id="nImg" class="user-img" src="user1.png" alt="User" />
+        <div class="text-col">
+            <div class="live-title"><div class="live-dot"></div>LIVE WINNING</div>
+            <div class="win-text" id="nText">User Won ₹0</div>
+        </div>
+    </div>
+</div>
+
+<!-- FLOATING TOOL CONTAINER -->
+<div id="tool-container">
+    <!-- MINI LAUNCHER LOGO -->
+    <div id="mini" class="launcher" onclick="openM()">
+        <img src="logo.png" class="logo-img" alt="Logo" onerror="this.src=''; this.style.backgroundColor='#00ff66';" />
+    </div>
+
+    <!-- MAIN PREDICTION PANEL -->
+    <div id="main" class="stage">
+        <div class="panel">
+            <div class="shine-box"></div>
+            <div class="head">
+                <div class="head-left">
+                    <div class="title">𝙑𝙀𝙀𝙍 𝙂𝘼𝙈𝙀 <b>𝙋𝘼𝙉𝙀𝙇</b></div>
+                    <div class="status-row"><span class="status-dot"></span> ACTIVE</div>
+                </div>
+                <div class="head-right">
+                    <div class="wingo">1M <span id="periodId" style="color:#fff;">#----</span></div>
+                    <div class="kolkata-time" id="kolkataTime">--:--:--</div>
+                </div>
+            </div>
+            <div id="content"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+    /* =========================================
+       LOGIN SYSTEM LOGIC
+       ========================================= */
+    let systemUnlocked = false;
+
+    function checkLogin() {
+        const pass = document.getElementById('passInput').value;
+        const errorDiv = document.getElementById('login-error');
+        
+        if (pass === "SURAJ") {
+            systemUnlocked = true;
+            document.getElementById('login-overlay').style.display = 'none'; // Hide Login
+            document.getElementById('bg-iframe').style.display = 'block'; // Show Website
+            document.getElementById('tool-container').style.display = 'block'; // Show Tool
+            document.getElementById('notif-container').style.display = 'block'; // Show Notifications
+            closeM(); // Start minimized
+            startNotifLoop(); // Start showing notifications
+        } else {
+            errorDiv.innerText = "ACCESS DENIED. INVALID KEY.";
+            setTimeout(() => { errorDiv.innerText = ""; }, 2500);
+        }
+    }
+
+    /* =========================================
+       NOTIFICATION LOGIC
+       ========================================= */
+    const names = ['Aarav','Vivaan','Aditya','Vihaan','Arjun','Sai','Reyansh','Ayaan','Krishna','Ishaan','Shaurya','Atharva','Aarush','Aryan','Kabir','Rudra','Dhruv','Kian','Devansh','Yash','Kartik','Ranveer','Ansh','Rishi','Pranav','Dev','Neel','Samar','Veer','Sahil','Rohan','Ayush','Rahul','Ananya','Diya','Saanvi','Aadhya','Pari','Anika','Navya','Avni','Isha','Myra','Aarya','Kavya','Riya','Sara','Aaradhya','Kyra','Anshi','Aditi','Mahi','Siya','Prisha','Sneha','Tanvi','Roshni','Nisha','Pooja','Neha','Kriti','Ritu','Simran','Payal','Kareena','Deepa','Amit','Vikas','Sandeep','Ravi','Manish','Raj','Suraj','Vijay','Ajay','Nitin','Prakash','Deepak','Sunil','Tarun','Alok','Harsh','Naveen','Gaurav','Vishal','Anil','Suresh','Ramesh','Mahesh','Dinesh','Naresh','Jatin','Mohit','Kapil','Sachin','Ashish'];
+    
+    function showNotif() {
+        if (!systemUnlocked) return;
+        let name = names[Math.floor(Math.random() * names.length)];
+        let amt = Math.floor(Math.random() * 190 + 10) * 50;
+        
+        // Randomly pick user1.png to user5.png
+        let imgNum = Math.floor(Math.random() * 5) + 1;
+        document.getElementById('nImg').src = 'user' + imgNum + '.png';
+        
+        document.getElementById('nText').innerHTML = name + ' Won <span style="color:#ffd23a">₹' + amt + '</span>';
+        
+        let box = document.getElementById('nBox');
+        box.classList.add('show');
+        setTimeout(() => { box.classList.remove('show'); }, 3000);
+    }
+    
+    function startNotifLoop() {
+        setTimeout(showNotif, 1000);
+        setInterval(showNotif, 5000);
+    }
+
+    /* =========================================
+       PREDICTION TOOL LOGIC
+       ========================================= */
+    let state = 'wingo'; 
+    let isNumberMode = false;
+    let justGenerated = false;
+    
+    let currentResultNum = 9;
+    let currentSz = 'BIG';
+    let currentCKey = 'GREEN';
+    let currentCTxt = 'GREEN';
+    let currentConf = '0.0';
+
+    const colorMap = {
+        'RED': { bg: 'linear-gradient(180deg,#ff5a6e 0%, #ff2a4a 55%, #a40020 100%)', border: 'rgba(255,140,150,.9)' },
+        'GREEN': { bg: 'linear-gradient(180deg,#5dffae 0%, #1bd06a 55%, #007a3a 100%)', border: 'rgba(150,255,200,.9)' },
+        'VIOLET': { bg: 'linear-gradient(180deg,#c98aff 0%, #8a4bff 55%, #4a0fa6 100%)', border: 'rgba(210,170,255,.9)' },
+        'RED+VIOLET': { bg: 'linear-gradient(135deg, #ff2a4a 50%, #8a4bff 50%)', border: 'rgba(255,140,255,.9)' },
+        'GREEN+VIOLET': { bg: 'linear-gradient(135deg, #1bd06a 50%, #8a4bff 50%)', border: 'rgba(200,255,255,.9)' }
+    };
+
+    function getP() {
+        let d = new Date(Date.now() + 2000);
+        let utc = new Date(d.getTime() + (d.getTimezoneOffset() * 60000));
+        let y = utc.getFullYear();
+        let m = String(utc.getMonth() + 1).padStart(2, '0');
+        let dt = String(utc.getDate()).padStart(2, '0');
+        let totalMins = (utc.getHours() * 60) + utc.getMinutes();
+        return y + m + dt + String(10001 + totalMins - 1);
+    }
+    
+    function pad(n) { return String(n).padStart(2, '0'); }
+
+    function openM() {
+        document.getElementById('main').style.display = 'block';
+        document.getElementById('mini').style.display = 'none';
+        render();
+    }
+    
+    function closeM() {
+        document.getElementById('main').style.display = 'none';
+        document.getElementById('mini').style.display = 'flex';
+    }
+
+    function executeScan() {
+        state = 'scanning';
+        render();
+        
+        setTimeout(function() {
+            currentResultNum = Math.floor(Math.random() * 10);
+            currentConf = (99.0 + (Math.random() * 0.9)).toFixed(1);
+            let sizes = ['SMALL', 'BIG'];
+            let colors = [
+                {c: 'RED', t: 'RED'}, {c: 'GREEN', t: 'GREEN'}, 
+                {c: 'VIOLET', t: 'VIOLET'}, {c: 'RED+VIOLET', t: 'RED+VIO'}, 
+                {c: 'GREEN+VIOLET', t: 'GRN+VIO'}
+            ];
+            currentSz = sizes[Math.floor(Math.random() * sizes.length)];
+            let rc = colors[Math.floor(Math.random() * colors.length)];
+            currentCKey = rc.c;
+            currentCTxt = rc.t;
+            
+            state = 'result';
+            justGenerated = true;
+            render();
+        }, 2500);
+    }
+
+    function toggleNumberMode() {
+        isNumberMode = !isNumberMode;
+        render();
+    }
+
+    function render() {
+        const cont = document.getElementById('content');
+        if (!cont) return;
+        
+        let html = '';
+        
+        if (state === 'wingo') {
+            html = '<div class="info-box box-green">' +
+                '<div class="box-title text-cyan">SERVER LIVE</div>' +
+                '<div class="box-list">• Server connected<br>• Game: <span class="text-green">Wingo 1Min</span><br>• Tap to analyze</div>' +
+                '<div class="box-footer">Panel is ready to inject.</div>' +
+            '</div><div class="buttons-area"><button class="btn btn-action" onclick="executeScan()">ANALYZE</button><button class="btn btn-hide" onclick="closeM()">HIDE</button></div>';
+        
+        } else if (state === 'scanning') {
+            html = '<div class="info-box box-green" style="text-align:center; padding: 25px 0;">' +
+                '<div class="circle-loader"></div>' +
+                '<div style="font-family:\'Orbitron\'; color:var(--cyan); margin-top:15px; letter-spacing:2px; font-weight:800;">ANALYZING...</div>' +
+            '</div><div class="buttons-area"><button class="btn btn-hide" style="flex:1" onclick="closeM()">HIDE PANEL</button></div>';
+        
+        } else if (state === 'result') {
+            let c = colorMap[currentCKey];
+            let sizeClass = currentSz === 'BIG' ? 'res-size-big' : 'res-size-small';
+            
+            let lockSvgHtml = '<svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2.5" ry="2.5"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path><circle cx="12" cy="16" r="1" fill="#ffffff" stroke="none"></circle></svg>';
+            
+            // Uses num_0.png to num_9.png
+            let numberHtml = '<img src="num_' + currentResultNum + '.png" alt="Num">';
+            let bContent = isNumberMode ? numberHtml : lockSvgHtml;
+            
+            let ballBoxHtml = '<div class="ball-box">' +
+                '<div class="ball-row" id="ballRow">' +
+                    '<div class="ball"><div class="ball-in">' + bContent + '</div></div>' +
+                    '<div class="ball"><div class="ball-in">' + bContent + '</div></div>' +
+                    '<div class="ball"><div class="ball-in">' + bContent + '</div></div>' +
+                '</div>';
+                
+            if (!isNumberMode) {
+                ballBoxHtml += '<div class="lock-text">LOCKED - TAP NUMBER MODE TO REVEAL</div>';
+            }
+            ballBoxHtml += '</div>';
+            
+            html = '<div class="countdown-wrap">' +
+                '<div class="countdown-label">NEXT ROUND IN</div>' +
+                '<div class="countdown" id="countdown">00:00</div>' +
+                '<div class="cd-bar" id="cdBar"><i id="cdFill"></i></div>' +
+            '</div>' +
+            ballBoxHtml +
+            '<div class="results">' +
+                '<div class="res-pill ' + sizeClass + '">' + currentSz + '</div>' +
+                '<div class="res-pill res-color" style="background:' + c.bg + '; border-color:' + c.border + ';">' + currentCTxt + '</div>' +
+            '</div>' +
+            '<div class="conf">' +
+                '<div class="conf-head"><span>CONFIDENCE</span><b id="confVal">' + currentConf + '%</b></div>' +
+                '<div class="conf-bar"><i id="confFill" style="width:' + currentConf + '%"></i></div>' +
+            '</div>' +
+            '<div class="buttons-area" style="margin-top:6px; margin-bottom:6px;">' +
+                '<button class="btn btn-action" style="background: linear-gradient(90deg, #00d2ff, #0077ff); color:#fff;" onclick="toggleNumberMode()">NUMBER MODE</button>' +
+            '</div>' +
+            '<div class="buttons-area">' +
+                '<button class="btn btn-action" onclick="executeScan()">EXECUTE</button>' +
+                '<button class="btn btn-hide" onclick="closeM()">HIDE</button>' +
+            '</div>';
+        }
+        
+        cont.innerHTML = html;
+        
+        if (state === 'result' && justGenerated) {
+            justGenerated = false;
+            let pills = document.querySelectorAll('.res-pill');
+            pills.forEach(p => { p.classList.remove('res-pop'); void p.offsetWidth; p.classList.add('res-pop'); });
+            let bRow = document.getElementById('ballRow');
+            if (bRow) {
+                [...bRow.children].forEach(bl => bl.classList.add('ball-spin'));
+                setTimeout(() => { [...bRow.children].forEach(bl => bl.classList.remove('ball-spin')); }, 900);
+            }
+        }
+    }
+
+    setInterval(() => {
+        let d = new Date(Date.now() + 2000);
+        let utc = new Date(d.getTime() + (d.getTimezoneOffset() * 60000));
+        let k = new Date(utc.getTime() + (5.5 * 3600 * 1000));
+        
+        document.getElementById('kolkataTime').textContent = pad(k.getHours()) + ':' + pad(k.getMinutes()) + ':' + pad(k.getSeconds());
+        
+        let s = utc.getSeconds(); 
+        let sl = 60 - s; if (sl === 60) sl = 60;
+        
+        let cd = document.getElementById('countdown');
+        let cdb = document.getElementById('cdBar');
+        let cdf = document.getElementById('cdFill');
+        
+        if (cd) {
+            cd.textContent = '00:' + pad(sl);
+            cd.classList.remove('warn', 'crit');
+            if (cdb) cdb.classList.remove('warn', 'crit');
+            
+            if (sl <= 5) {
+                cd.classList.add('crit');
+                if (cdb) cdb.classList.add('crit');
+            } else if (sl <= 15) {
+                cd.classList.add('warn');
+                if (cdb) cdb.classList.add('warn');
+            }
+            if (cdf) cdf.style.width = ((sl / 60) * 100) + '%';
+        }
+        
+        let cp = getP();
+        let per = document.getElementById('periodId');
+        if (per) { per.innerText = '#' + cp.slice(-4); }
+        
+    }, 1000);
+
+    /* =========================================
+       SMOOTH DRAG LOGIC (OVER IFRAME FIX & NO SCROLL)
+       ========================================= */
+    dragElement(document.getElementById("tool-container"));
+
+    function dragElement(elmnt) {
+      var pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
+      
+      elmnt.onmousedown = dragMouseDown;
+      elmnt.ontouchstart = dragMouseDown;
+
+      function dragMouseDown(e) {
+        e = e || window.event;
+        
+        // Prevent clicking buttons from triggering drag
+        if(e.target.tagName === 'BUTTON' || e.target.classList.contains('btn')) return;
+        
+        // Prevent background iframe from stealing touch events while dragging
+        document.getElementById('bg-iframe').style.pointerEvents = 'none';
+
+        if (e.type === 'touchstart') {
+            pos3 = e.touches[0].clientX;
+            pos4 = e.touches[0].clientY;
+        } else {
+            pos3 = e.clientX;
+            pos4 = e.clientY;
+        }
+        
+        document.onmouseup = closeDragElement;
+        document.ontouchend = closeDragElement;
+        document.onmousemove = elementDrag;
+        document.ontouchmove = elementDrag;
+      }
+
+      function elementDrag(e) {
+        e = e || window.event;
+        e.preventDefault(); // Extra protection to stop browser scroll behaviors
+        
+        let clientX = e.type === 'touchmove' ? e.touches[0].clientX : e.clientX;
+        let clientY = e.type === 'touchmove' ? e.touches[0].clientY : e.clientY;
+        
+        pos1 = pos3 - clientX;
+        pos2 = pos4 - clientY;
+        pos3 = clientX;
+        pos4 = clientY;
+        
+        elmnt.style.top = (elmnt.offsetTop - pos2) + "px";
+        elmnt.style.left = (elmnt.offsetLeft - pos1) + "px";
+        elmnt.style.bottom = "auto";
+        elmnt.style.right = "auto";
+      }
+
+      function closeDragElement() {
+        document.onmouseup = null;
+        document.onmousemove = null;
+        document.ontouchend = null;
+        document.ontouchmove = null;
+        
+        // Restore iframe interaction
+        document.getElementById('bg-iframe').style.pointerEvents = 'auto';
+      }
+    }
+</script>
+</body>
+</html>
